@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chrono-graph
+  namespace: ${NAMESPACE}
+  labels:
+    app: chrono-graph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chrono-graph
+  template:
+    metadata:
+      labels:
+        app: chrono-graph
+    spec:
+      containers:
+        - name: chrono-graph
+          image: ${CHRONO_GRAPH_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: chrono-graph-config
+            - secretRef:
+                name: chrono-graph-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10

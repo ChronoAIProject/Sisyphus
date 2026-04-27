@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chrono-graph-config
+  namespace: ${NAMESPACE}
+data:
+  # chrono-graph is a Neo4j-backed knowledge-graph service. Provide a Bolt URI
+  # to a Neo4j instance you operate (Aura, self-hosted, or in-cluster).
+  Neo4j__Uri: "${NEO4J_URI}"
+  Neo4j__Database: "${NEO4J_DATABASE}"

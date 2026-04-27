@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sisyphus-web
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: sisyphus-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

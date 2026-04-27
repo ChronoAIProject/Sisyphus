@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sisyphus-api
+  namespace: ${NAMESPACE}
+  labels:
+    app: sisyphus-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sisyphus-api
+  template:
+    metadata:
+      labels:
+        app: sisyphus-api
+    spec:
+      # Papers compile signs presigned URLs from chrono-storage that point
+      # at `minio.ornn-cluster.local` (the browser-facing hostname).
+      # Resolve that hostname in-cluster so signed URLs are valid both
+      # inside and outside the cluster.
+      hostAliases:
+        - ip: ${MINIO_HOST_ALIAS_IP}
+          hostnames:
+            - minio.ornn-cluster.local
+      initContainers:
+        - name: wait-for-mongodb
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z mongodb 27017; do echo "waiting for mongodb..."; sleep 2; done']
+      containers:
+        - name: sisyphus-api
+          image: ${SISYPHUS_API_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: sisyphus-api-config
+            - secretRef:
+                name: sisyphus-api-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10

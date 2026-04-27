@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sisyphus-api-config
+  namespace: ${NAMESPACE}
+data:
+  PORT: "${SISYPHUS_API_PORT}"
+  DB_NAME: "${SISYPHUS_DB_NAME}"
+  # chrono-graph (used by ingest + runner)
+  CHRONO_GRAPH_URL: "${CHRONO_GRAPH_URL}"
+  GRAPH_ID: "${SISYPHUS_GRAPH_ID}"
+  # chrono-storage (papers PDF blob store)
+  CHRONO_STORAGE_URL: "${CHRONO_STORAGE_URL}"
+  STORAGE_BUCKET: "${SISYPHUS_STORAGE_BUCKET}"
+  # chrono-ornn (skill prompts for workflows compile)
+  CHRONO_ORNN_URL: "${CHRONO_ORNN_URL}"
+  ORNN_API_URL: "${CHRONO_ORNN_URL}"
+  # Aevatar mainnet (runner exec + workflows deploy)
+  AEVATAR_API_URL: "${AEVATAR_API_URL}"
+  AEVATAR_MAINNET_URL: "${AEVATAR_API_URL}"
+  SCOPE_ID: "${SISYPHUS_SCOPE_ID}"
+  # Internal references — leftover from the pre-merge microservices, both
+  # still call the same sisyphus-api over HTTP. Keep them pointing at the
+  # cluster-internal sisyphus-api Service.
+  WORKFLOW_SERVICE_URL: "http://sisyphus-api:${SISYPHUS_API_PORT}"
+  SCHEMA_SERVICE_URL: "http://sisyphus-api:${SISYPHUS_API_PORT}"
+  # Runner + event log retention
+  VERIFY_CRON_INTERVAL_HOURS: "${SISYPHUS_VERIFY_CRON_INTERVAL_HOURS}"
+  EVENT_TTL_DAYS: "${SISYPHUS_EVENT_TTL_DAYS}"

@@ -1,0 +1,16 @@
+{
+  "entryFile": "src/app.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": ["src/**/controllers/**/*.ts", "src/health/**/*.ts"],
+  "spec": {
+    "outputDirectory": "src/generated",
+    "specVersion": 3,
+    "name": "Sisyphus API",
+    "description": "Unified Sisyphus backend API. Combines admin (settings + audit), ingest (knowledge graph upload), papers (LaTeX/PDF compilation), runner (workflow execution + WebSocket streaming), schemas (JSON Schema CRUD + validation), and workflows (workflow/connector definitions + compile + deploy to Aevatar mainnet).",
+    "version": "1.0.0"
+  },
+  "routes": {
+    "routesDir": "src/generated",
+    "esm": true
+  }
+}

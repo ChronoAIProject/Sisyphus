@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sisyphus-web
+  namespace: ${NAMESPACE}
+  labels:
+    app: sisyphus-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sisyphus-web
+  template:
+    metadata:
+      labels:
+        app: sisyphus-web
+    spec:
+      # Note: sisyphus-web bakes VITE_* env vars at `vite build` time, not at
+      # container start. Make sure sisyphus-web/.env (with NyxID OAuth + proxy
+      # URLs that resolve inside this local cluster) is populated before
+      # building the image — the values get baked into the JS bundle.
+      containers:
+        - name: sisyphus-web
+          image: ${SISYPHUS_WEB_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10

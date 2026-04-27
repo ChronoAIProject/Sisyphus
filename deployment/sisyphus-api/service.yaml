@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sisyphus-api
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: sisyphus-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chrono-graph
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: chrono-graph
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
