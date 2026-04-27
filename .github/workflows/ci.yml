@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install sisyphus-api
+        working-directory: sisyphus-api
+        run: npm ci --ignore-scripts
+      - name: tsoa generate
+        working-directory: sisyphus-api
+        run: npx tsoa spec-and-routes
+      - name: typecheck sisyphus-api
+        working-directory: sisyphus-api
+        run: npx tsc --noEmit
+      # sisyphus-web's `file:../../NyxID/sdk/...` deps require a sibling
+      # NyxID checkout, which CI doesn't have. Web typecheck is skipped
+      # in CI for now — covered locally via `npm run build` on the dev
+      # machine before pushing.
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install sisyphus-api
+        working-directory: sisyphus-api
+        run: npm ci --ignore-scripts
+      - name: Run sisyphus-api tests
+        working-directory: sisyphus-api
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install sisyphus-api
+        working-directory: sisyphus-api
+        run: npm ci --ignore-scripts
+      - name: Build sisyphus-api
+        working-directory: sisyphus-api
+        run: npm run build
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          VERSION=$(curl -sI https://github.com/gitleaks/gitleaks/releases/latest | grep -i location | grep -oE 'v[0-9.]+' | head -1 | sed 's/^v//')
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | tar xz
+          sudo mv gitleaks /usr/local/bin/
+      - name: Scan for secrets
+        run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build sisyphus-api image
+        run: docker build -t sisyphus-api-ci sisyphus-api/
+      # sisyphus-web image build requires a sibling NyxID/ checkout in
+      # the build context, which CI doesn't have set up. Verified locally
+      # before each release for now.

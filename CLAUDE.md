@@ -242,11 +242,118 @@ sisyphus-api boots even if some downstream dependencies are unreachable — only
 - **Never** include `Co-Authored-By` lines in commit messages.
 - **Never** auto-push without explicit user approval.
 - **Never** force push.
-- Single `.gitignore` at repo root only. Must ignore `.env`, `.env.*` (except `.env.sample`), `*.pem`, `*.key`, `credentials.json`, `node_modules/`, `dist/`, `sisyphus-api/src/generated/`.
+- Single `.gitignore` at repo root only. Must ignore `.env`, `.env.*` (except `.env.sample` / `.env.sample.*`), `*.pem`, `*.key`, `credentials.json`, `node_modules/`, `dist/`, `sisyphus-api/src/generated/`.
 
 ## Branching Strategy
 
-- **`main`** — Production release branch. Protected: no direct push, no force push, PRs only from `develop`.
+- **`main`** — Production release branch. Protected: no direct push, no force push, PRs only from `develop` or `release/*` (the latter only opened by the changeset-release bot).
 - **`develop`** — Default branch and active development branch. Contains the latest CI-passing code. Protected: no direct push, no force push, PRs from any feature branch.
 - **Workflow:** `feature/xxx` → PR → `develop` → PR → `main`.
-- New work MUST branch from the latest `origin/develop`.
+- PR merge auto-deletes the source branch (protected branches excluded).
+- **New work MUST branch from the latest `origin/develop`.** Every feature, bug fix, or any kind of change must start from a freshly fetched `develop` — either a new branch (`git fetch && git checkout develop && git pull && git checkout -b <name>`) or a new worktree created against `origin/develop`. Never branch off a stale local `develop` or another feature branch.
+
+## Versioning & Releases
+
+This project uses **Changesets** (`@changesets/cli`) for versioning.
+
+- Both packages (`sisyphus-api`, `sisyphus-web`) share a unified version number (fixed mode).
+- Each package has its own `CHANGELOG.md`, auto-generated with GitHub PR links.
+- Release notes are published on [GitHub Releases](https://github.com/ChronoAIProject/Sisyphus/releases).
+
+### During development
+
+Every feature PR targeting `develop` MUST include a changeset:
+
+```bash
+npx changeset
+```
+
+Select affected package(s), semver bump level (`patch` / `minor` / `major`), write a short description. Commit the generated `.changeset/*.md` file with the PR. CI (`changeset-check.yml`) blocks PRs that don't include one — use `npx changeset --empty` for docs-only / CI-only PRs.
+
+### Cutting a release
+
+Fully automated on the `main` side. No local script to run — developer action is "open a PR, review a PR". `.github/workflows/changeset-release.yml` is a state machine driven by `push: main`.
+
+**Step 1 — Promote `develop` → `main`.** Open a PR `develop → main` and merge it. Regular PR; it carries whatever features + unconsumed `.changeset/*.md` files have piled up on `develop` since the last release.
+
+**Step 2 — Review the bot's release-bump PR.** On the `main` push from Step 1, the workflow sees pending `.changeset/*.md` files, so it:
+
+1. Creates branch `release/v<next>` off `main`.
+2. Runs `npm run version-packages` — consumes `.changeset/*.md`, bumps both `package.json` files, appends to each `CHANGELOG.md`.
+3. Commits `chore: version packages → v<next>`, force-pushes the branch.
+4. Opens PR `release/v<next> → main`.
+
+Review that PR. Merge with **Squash and merge** (keeps history linear; `main` ends up with exactly one `chore: version packages → v<next>` commit).
+
+**Step 3 — Tag + GitHub Release + sync back to `develop`.** On the `main` push from Step 2, the workflow sees no pending changesets + `sisyphus-api/package.json`'s version has no matching `v<version>` tag, so it:
+
+1. Creates an annotated `v<version>` tag and pushes it.
+2. Extracts the `## <version>` section from each package's `CHANGELOG.md`, builds a combined body, and calls `gh release create`.
+3. Creates branch `sync/post-release-v<version>` from `main`.
+4. Opens PR `sync/post-release-v<version> → develop` — **auto-approved + auto-merged** by the same workflow via a direct `PUT /repos/.../pulls/:n/merge` API call with `merge_method: merge`. No human action for the sync step; the PR is a deterministic replay of a commit that already passed CI on `main`.
+
+**Load-bearing:** the sync PR **must** land as a merge commit, not a squash. A squash-merge creates an orphan commit on `develop` whose parent is the pre-bump `develop` tip, not `main`'s bump commit. Subsequent `develop → main` PRs then show a phantom version bump because `git merge-base` walks back past the orphan. A merge commit gives `develop` two parents (previous `develop` HEAD + `main`'s bump), making `merge-base(main, develop)` = `main`'s HEAD after the sync.
+
+If branch protection blocks the auto-merge (e.g. stricter required-reviewer rules added later), the PR stays open with a warning log entry — **merge it manually via "Create a merge commit", never "Squash and merge"**.
+
+### State summary (what the workflow does on every `main` push)
+
+| pending `.changeset/*.md` | `v<version>` tag exists | action |
+|---|---|---|
+| > 0 | — | open `release/v<next> → main` |
+| 0 | no | tag, create GH Release, open `sync/post-release-v<version> → develop` |
+| 0 | yes | no-op (hotfix / docs / CI push without changeset) |
+
+### Permissions
+
+The workflow needs `contents: write` + `pull-requests: write`. At the org level, "Allow GitHub Actions to create and approve pull requests" must be enabled.
+
+### Hotfixes directly to main
+
+If something lands on `main` without a changeset (emergency patch), state is "0 pending + tag exists" → no-op. No version bump. When you're back on the normal flow, add a proper changeset-carrying PR through `develop` to stamp the next version.
+
+## CI / required status checks
+
+Every PR runs the `.github/workflows/ci.yml` jobs. Branch protection on `develop` and `main` requires the following before merge:
+
+| Status check | Branch | Source |
+|---|---|---|
+| `typecheck` | both | `tsoa spec-and-routes` + `tsc --noEmit` on sisyphus-api |
+| `test` | both | `vitest run` on sisyphus-api |
+| `build` | both | `npm run build` on sisyphus-api |
+| `gitleaks` | both | `gitleaks detect` against the PR diff |
+| `docker-build` | both | `docker build sisyphus-api/` |
+| `check-approval` | both | `require-review.yml` — collaborator gate |
+| `check-changeset` | develop | every PR to develop must include a `.changeset/*.md` |
+| `check-source-branch` | main | only `develop` or `release/*` may target `main` |
+
+sisyphus-web typecheck/build is intentionally NOT in CI today — its `file:../../NyxID/sdk/...` deps need a sibling NyxID checkout that CI doesn't have. Verified locally before each release. Same for the sisyphus-web docker image.
+
+## CODEOWNERS
+
+`.github/CODEOWNERS` gates trust-critical paths to `@chronoai-shining` so a malicious PR can't loosen the gates and self-merge. Currently covers:
+
+- `*` (default — every file needs maintainer review until we add team members)
+- `/.github/workflows/`, `/.github/CODEOWNERS`
+- `/.changeset/config.json` (fixed-linked package policy)
+- `/package.json`, `/sisyphus-api/package.json`, `/sisyphus-web/package.json`
+- `/sisyphus-api/Dockerfile`, `/sisyphus-web/Dockerfile`, `/sisyphus-web/nginx.conf`, `/deployment/`
+
+For these rules to actually gate, branch protection must enable "Require review from Code Owners" — the `require-review.yml` workflow handles the trusted-author / collaborator carve-outs.
+
+## GitHub Issue Rules
+
+Issue tracker: https://github.com/ChronoAIProject/Sisyphus/issues
+
+1. **All sisyphus work lives as GitHub issues.** Every feature, bug, and proposal MUST be created as an issue on the tracker above. Do NOT write proposals, task specs, or tracking docs under `docs/` — use issues.
+2. **Default assignee:** every issue MUST be assigned to `chronoai-shining`.
+3. **Title prefix:** every issue title MUST start with a category tag — one of `[Bug]`, `[Feature]`, `[CI/CD]`, `[Docs]`, `[Misc]`. Example: `[Feature] WebSocket reconnect with exponential backoff`.
+4. **No duplicates.** Before creating a new issue, search the existing issue list. If duplicates are found, keep one and close the others with a comment `Duplicate of #N`.
+5. **PR ↔ issue linkage:**
+   - Every PR MUST tag the issue(s) it resolves in the PR body (use `Closes #123` / `Fixes #123`).
+   - When the PR merges, all tagged issues MUST be closed.
+   - If a PR solves something with no existing issue, create the issue first, then tag it in the PR.
+6. **Cross-references:** when issues are related or have an execution order, add explicit references in the issue body (`Depends on #X`, `Blocks #Y`, `Related to #Z`).
+7. **Milestones for large work:** any large feature or code change MUST have a milestone, and all related issues MUST be attached to it.
+8. **Milestone deadlines:** every milestone MUST have a `due_on` date.
+9. **Labels:** every issue MUST carry at least one topic label (e.g., `api`, `dx`, `security`, `infra`, `phase:N`) so the issue's domain is visible at a glance.

@@ -1,0 +1,32 @@
+name: Enforce branch policy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR source branch is develop or release/*
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Two legal paths to main:
+          #   1. develop → main          (normal feature promote)
+          #   2. release/* → main        (bot-opened version-bump PR
+          #                               from the changeset-release
+          #                               workflow state machine)
+          if [ "$HEAD_REF" = "develop" ]; then
+            echo "Source branch is develop — OK"
+            exit 0
+          fi
+          case "$HEAD_REF" in
+            release/*)
+              echo "Source branch is $HEAD_REF (release-bump PR) — OK"
+              exit 0
+              ;;
+          esac
+          echo "::error::PRs targeting main must come from 'develop' or 'release/*'. Got: $HEAD_REF"
+          exit 1

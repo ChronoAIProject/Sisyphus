@@ -1,0 +1,39 @@
+# Code Owners — enforce maintainer review on trust-critical paths.
+#
+# Branch protection on `main` and `develop` must enable
+# "Require review from Code Owners" for these rules to actually gate.
+#
+# Pattern precedence: last-matching wins, per the CODEOWNERS format.
+
+# ---- Default owner ------------------------------------------------------
+# Nothing falls through without a maintainer review today. Relax later if
+# we add team members.
+*                                @chronoai-shining
+
+# ---- Workflow + CODEOWNERS itself --------------------------------------
+# These dictate what gets auto-approved / auto-merged / tagged by the
+# release state machine. Any change to them must come from the maintainer
+# so a malicious PR can't loosen the approval gate then auto-merge itself.
+/.github/workflows/              @chronoai-shining
+/.github/CODEOWNERS              @chronoai-shining
+
+# ---- Changeset config --------------------------------------------------
+# Determines package-version policy (fixed-linked mode, package list).
+# Opening this up would let a PR decouple sisyphus-api / sisyphus-web
+# versions without the maintainer noticing.
+/.changeset/config.json          @chronoai-shining
+
+# ---- Branch/version release surface ------------------------------------
+# Release-related scripts + top-level package manifest (workspaces,
+# versioning scripts).
+/package.json                    @chronoai-shining
+/sisyphus-api/package.json       @chronoai-shining
+/sisyphus-web/package.json       @chronoai-shining
+
+# ---- Docker + deployment -----------------------------------------------
+# Supply-chain sensitive. Changing build args or base images is a
+# backdoor-shaped footgun.
+/sisyphus-api/Dockerfile         @chronoai-shining
+/sisyphus-web/Dockerfile         @chronoai-shining
+/sisyphus-web/nginx.conf         @chronoai-shining
+/deployment/                     @chronoai-shining

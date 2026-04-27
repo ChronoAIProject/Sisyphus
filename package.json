@@ -1,0 +1,24 @@
+{
+  "name": "sisyphus",
+  "private": true,
+  "workspaces": [
+    "sisyphus-api",
+    "sisyphus-web"
+  ],
+  "scripts": {
+    "build": "npm run --workspace sisyphus-api build && npm run --workspace sisyphus-web build",
+    "build:api": "npm run --workspace sisyphus-api build",
+    "build:web": "npm run --workspace sisyphus-web build",
+    "test": "npm run --workspace sisyphus-api test",
+    "test:api": "npm run --workspace sisyphus-api test",
+    "typecheck:api": "npx --workspace sisyphus-api tsc --noEmit",
+    "typecheck:web": "npx --workspace sisyphus-web tsc -b --noEmit",
+    "typecheck": "npm run typecheck:api && npm run typecheck:web",
+    "changeset": "changeset",
+    "version-packages": "changeset version"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0"
+  }
+}

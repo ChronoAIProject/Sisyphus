@@ -1,0 +1,69 @@
+name: Require team review
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  check-approval:
+    runs-on: ubuntu-latest
+    # checkCollaborator is a read-only metadata call; the default
+    # GITHUB_TOKEN scope already covers it, but we name it here so the
+    # intent is explicit and fork PRs can't silently lose access.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check if team approval is required
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            // Trusted authors can self-merge without external approval:
+            //   - chronoai-shining (maintainer)
+            //   - github-actions[bot] (release-bump + sync PRs opened by
+            //     the changeset-release workflow state machine)
+            const TRUSTED_AUTHORS = new Set([
+              'chronoai-shining',
+              'github-actions[bot]',
+              'app/github-actions',
+            ]);
+            if (TRUSTED_AUTHORS.has(author)) {
+              console.log(`PR author is ${author} — no approval required`);
+              return;
+            }
+
+            // Anyone explicitly invited as a collaborator on the repo (any
+            // permission level — read, triage, write, maintain, admin)
+            // passes without an additional maintainer approval gate. The
+            // act of accepting the collaborator invite is the vetting.
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: author,
+              });
+              console.log(`PR author '${author}' is a repo collaborator — no approval required`);
+              return;
+            } catch (err) {
+              if (err.status !== 404) {
+                // Any non-404 error (rate limit, auth, transient) should
+                // surface rather than be silently treated as "not a
+                // collaborator" — that would mask token-scope regressions.
+                throw err;
+              }
+              // 404 = not a collaborator. Fall through to the gate below.
+            }
+
+            // External contributors fall through to the explicit fail. Add
+            // them as repo collaborators (Settings → Collaborators) if you
+            // want them to pass this check automatically.
+            core.setFailed(
+              `PRs from '${author}' require maintainer approval. Add them as a repo collaborator to auto-pass this check.`,
+            );
